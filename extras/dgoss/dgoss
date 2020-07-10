@@ -45,7 +45,7 @@ run(){
         info "Creating docker container"
         id=$(docker create "${@:2}")
         info "Copy goss files into container"
-        docker cp $tmp_dir/. $id:/goss
+        docker cp "$tmp_dir/." $id:/goss
         info "Starting docker container"
         docker start $id > /dev/null
         ;;
@@ -64,9 +64,27 @@ get_docker_file() {
         docker cp "$id:$1" "${GOSS_FILES_PATH}/${GOSS_FILE:-goss.yaml}"
     fi
 }
+# In order for the docker command to work properly on the MSYS platform,
+# - convert $tmp_dir to the actual path in windows (e.g. /c/Users/path/to/users/temp/dir/tmp.XXXXX)
+# - exclude the pathes that passed to the docker command from the MSYS path conversion.
+msys_path_fix() {
+    [ -r /proc/version ] || return
+    case "$(</proc/version)" in
+        MSYS*|MINGW*)
+            [ "$(which cygpath) 2>/dev/null" ] || return
+            tmp_dir="$(cygpath -m "$tmp_dir")"
+            tmp_dir="${tmp_dir,}"
+            tmp_dir="/${tmp_dir/:/}"
+            MSYS2_ARG_CONV_EXCL="$tmp_dir;/goss;$MSYS2_ARG_CONV_EXCL"
+            MSYS2_ARG_CONV_EXCL="${MSYS2_ARG_CONV_EXCL%;}"
+            export MSYS2_ARG_CONV_EXCL
+            ;;
+    esac
+}
 
 # Main
 tmp_dir=$(mktemp -d /tmp/tmp.XXXXXXXXXX)
+msys_path_fix
 chmod 777 "$tmp_dir"
 trap 'ret=$?;cleanup;exit $ret' EXIT
 
